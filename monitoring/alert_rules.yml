@@ -1,0 +1,279 @@
+# Prometheus Alert Rules for Ask Polestar Influence System
+
+groups:
+  - name: system_alerts
+    interval: 30s
+    rules:
+      # High CPU usage
+      - alert: HighCPUUsage
+        expr: 100 - (avg by(instance) (irate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 80
+        for: 5m
+        labels:
+          severity: warning
+          service: system
+        annotations:
+          summary: "High CPU usage detected"
+          description: "CPU usage is above 80% for more than 5 minutes on {{ $labels.instance }}"
+
+      # High memory usage
+      - alert: HighMemoryUsage
+        expr: (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100 > 85
+        for: 5m
+        labels:
+          severity: critical
+          service: system
+        annotations:
+          summary: "High memory usage detected"
+          description: "Memory usage is above 85% for more than 5 minutes on {{ $labels.instance }}"
+
+      # Disk space usage
+      - alert: HighDiskUsage
+        expr: (1 - (node_filesystem_avail_bytes / node_filesystem_size_bytes)) * 100 > 90
+        for: 5m
+        labels:
+          severity: critical
+          service: system
+        annotations:
+          summary: "High disk usage detected"
+          description: "Disk usage is above 90% for more than 5 minutes on {{ $labels.instance }} {{ $labels.mountpoint }}"
+
+  - name: application_alerts
+    interval: 30s
+    rules:
+      # FastAPI application down
+      - alert: FastAPIDown
+        expr: up{job="fastapi-app"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          service: application
+        annotations:
+          summary: "FastAPI application is down"
+          description: "FastAPI application has been down for more than 2 minutes"
+
+      # High response time
+      - alert: HighResponseTime
+        expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m])) > 2
+        for: 5m
+        labels:
+          severity: warning
+          service: application
+        annotations:
+          summary: "High response time detected"
+          description: "95th percentile response time is above 2 seconds for more than 5 minutes"
+
+      # High error rate
+      - alert: HighErrorRate
+        expr: rate(http_requests_total{status=~"5.."}[5m]) / rate(http_requests_total[5m]) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+          service: application
+        annotations:
+          summary: "High error rate detected"
+          description: "Error rate is above 5% for more than 5 minutes"
+
+      # Too many requests
+      - alert: TooManyRequests
+        expr: rate(http_requests_total[5m]) > 1000
+        for: 5m
+        labels:
+          severity: warning
+          service: application
+        annotations:
+          summary: "High request rate detected"
+          description: "Request rate is above 1000 requests per second for more than 5 minutes"
+
+  - name: database_alerts
+    interval: 30s
+    rules:
+      # PostgreSQL down
+      - alert: PostgreSQLDown
+        expr: up{job="postgresql"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          service: database
+        annotations:
+          summary: "PostgreSQL is down"
+          description: "PostgreSQL database has been down for more than 2 minutes"
+
+      # High database connections
+      - alert: HighDatabaseConnections
+        expr: pg_stat_activity_count > 80
+        for: 5m
+        labels:
+          severity: warning
+          service: database
+        annotations:
+          summary: "High database connections"
+          description: "Database has more than 80 active connections for more than 5 minutes"
+
+      # Database replication lag
+      - alert: DatabaseReplicationLag
+        expr: pg_replication_lag > 30
+        for: 5m
+        labels:
+          severity: warning
+          service: database
+        annotations:
+          summary: "Database replication lag"
+          description: "Database replication lag is above 30 seconds for more than 5 minutes"
+
+  - name: redis_alerts
+    interval: 30s
+    rules:
+      # Redis down
+      - alert: RedisDown
+        expr: up{job="redis"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          service: cache
+        annotations:
+          summary: "Redis is down"
+          description: "Redis cache has been down for more than 2 minutes"
+
+      # High memory usage in Redis
+      - alert: RedisHighMemoryUsage
+        expr: redis_memory_used_bytes / redis_memory_max_bytes > 0.9
+        for: 5m
+        labels:
+          severity: warning
+          service: cache
+        annotations:
+          summary: "Redis high memory usage"
+          description: "Redis memory usage is above 90% for more than 5 minutes"
+
+      # High connection count in Redis
+      - alert: RedisHighConnections
+        expr: redis_connected_clients > 100
+        for: 5m
+        labels:
+          severity: warning
+          service: cache
+        annotations:
+          summary: "Redis high connection count"
+          description: "Redis has more than 100 connected clients for more than 5 minutes"
+
+  - name: celery_alerts
+    interval: 30s
+    rules:
+      # Celery workers down
+      - alert: CeleryWorkersDown
+        expr: celery_active_workers == 0
+        for: 2m
+        labels:
+          severity: critical
+          service: worker
+        annotations:
+          summary: "All Celery workers are down"
+          description: "No active Celery workers for more than 2 minutes"
+
+      # High task queue length
+      - alert: HighTaskQueueLength
+        expr: celery_queue_length > 1000
+        for: 5m
+        labels:
+          severity: warning
+          service: worker
+        annotations:
+          summary: "High task queue length"
+          description: "Celery task queue length is above 1000 for more than 5 minutes"
+
+      # High task failure rate
+      - alert: HighTaskFailureRate
+        expr: rate(celery_task_failed_total[5m]) / rate(celery_task_processed_total[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          service: worker
+        annotations:
+          summary: "High task failure rate"
+          description: "Celery task failure rate is above 10% for more than 5 minutes"
+
+  - name: business_logic_alerts
+    interval: 60s
+    rules:
+      # Low influence score
+      - alert: LowInfluenceScore
+        expr: avg(influence_score) < 50
+        for: 10m
+        labels:
+          severity: info
+          service: business
+        annotations:
+          summary: "Low average influence score"
+          description: "Average influence score is below 50 for more than 10 minutes"
+
+      # High API usage
+      - alert: HighAPIUsage
+        expr: rate(api_calls_total[1h]) > 10000
+        for: 5m
+        labels:
+          severity: warning
+          service: business
+        annotations:
+          summary: "High API usage detected"
+          description: "API usage is above 10000 calls per hour for more than 5 minutes"
+
+      # Subscription expiration warning
+      - alert: SubscriptionExpiringSoon
+        expr: subscription_days_remaining < 7
+        for: 1h
+        labels:
+          severity: info
+          service: business
+        annotations:
+          summary: "Subscription expiring soon"
+          description: "Subscription will expire in less than 7 days"
+
+  - name: ssl_certificate_alerts
+    interval: 300s
+    rules:
+      # SSL certificate expiration
+      - alert: SSLCertificateExpiringSoon
+        expr: ssl_certificate_expiry_days < 30
+        for: 1h
+        labels:
+          severity: warning
+          service: security
+        annotations:
+          summary: "SSL certificate expiring soon"
+          description: "SSL certificate will expire in less than 30 days"
+
+      # SSL certificate expired
+      - alert: SSLCertificateExpired
+        expr: ssl_certificate_expiry_days < 0
+        for: 0m
+        labels:
+          severity: critical
+          service: security
+        annotations:
+          summary: "SSL certificate expired"
+          description: "SSL certificate has expired"
+
+  - name: security_alerts
+    interval: 30s
+    rules:
+      # High number of failed login attempts
+      - alert: HighFailedLoginAttempts
+        expr: rate(failed_login_attempts_total[5m]) > 10
+        for: 5m
+        labels:
+          severity: warning
+          service: security
+        annotations:
+          summary: "High failed login attempts"
+          description: "Failed login attempts rate is above 10 per second for more than 5 minutes"
+
+      # Suspicious API activity
+      - alert: SuspiciousAPIActivity
+        expr: rate(api_requests_from_suspicious_ips_total[5m]) > 5
+        for: 5m
+        labels:
+          severity: warning
+          service: security
+        annotations:
+          summary: "Suspicious API activity detected"
+          description: "API requests from suspicious IPs rate is above 5 per second for more than 5 minutes"
